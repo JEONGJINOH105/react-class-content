@@ -7,7 +7,7 @@ import React from 'react'
 import "./App.css";
 // from : 어디 경로에서 포함할꺼냐?
 // 경로는 문자로 작성해야한다.
-import App from './App.css';
+// import App from './App.css';
 
 // 내가 게시글 페이지를 직접 만들었다.
 // 그 안에 여러가지 태그들을 묶었다.
