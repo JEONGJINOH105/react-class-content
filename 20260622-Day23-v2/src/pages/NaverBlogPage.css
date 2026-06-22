@@ -1,0 +1,51 @@
+.tag{
+  color: green;
+}
+
+.naver-blog{
+  margin: 0 500px;
+
+  text-align: center;
+}
+
+.naver-blog h2{
+  padding: 40px;
+}
+
+.naver-blog p{
+  padding: 10px;
+
+  text-align: left;
+}
+
+.naver-blog span{
+  display: inline-block;
+margin-right: 35px;
+}
+
+.post{
+  display: flex;
+  gap: 30px;
+
+  padding: 20px 0;
+}
+
+.post img{
+  width: 200px;
+  height: 200px;
+
+  margin-right: 0;
+}
+
+.post-content{
+  text-align: left;
+}
+
+.post-content p {
+  padding-left: 0;
+
+  font-size: 14px;
+  font-weight:400;
+
+  color: #4d4949;
+}

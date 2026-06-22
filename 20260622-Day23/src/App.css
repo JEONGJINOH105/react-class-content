@@ -1,0 +1,45 @@
+/* App.jsx */
+
+.drink-menus {
+  width: 300px;
+  
+  padding: 20px;
+
+  background-color: #ddd;
+
+  text-align: center;
+}
+
+.drink-menus button{
+  border: none;
+
+  background-color: royalblue;
+  color: white;
+
+  font-weight: 400;
+}
+
+/* ---------------------------------------------------------- */
+
+/* FoodPage.css */
+
+.food-menus{
+  display: flex;
+
+  gap: 20px;
+}
+
+.food-menu{
+
+  width: 200px;
+
+  padding: 20px;
+
+  background-color: #ddd;
+
+  text-align: center;
+}
+
+.food-menu img{
+  width: 100%;
+}
