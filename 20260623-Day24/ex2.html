@@ -1,0 +1,932 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>React map() 파일 실행 순서 & 매개변수 주입 원리 시뮬레이터</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Noto Sans KR) -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        font-family: "Noto Sans KR", sans-serif;
+      }
+      .code-font {
+        font-family: "Fira Code", "Courier New", Courier, monospace;
+      }
+
+      /* 단계별 타겟 포커스 하이라이트 애니메이션 */
+      .active-card {
+        border-color: #10b981 !important;
+        box-shadow: 0 0 25px rgba(16, 185, 129, 0.25);
+        transform: translateY(-2px);
+      }
+      .pending-card {
+        opacity: 0.4;
+        filter: grayscale(40%);
+      }
+
+      @keyframes pulse-ring {
+        0% {
+          transform: scale(0.95);
+          opacity: 0.5;
+        }
+        50% {
+          transform: scale(1.1);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(0.95);
+          opacity: 0.5;
+        }
+      }
+      .pulse-glow {
+        animation: pulse-ring 2s infinite ease-in-out;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between"
+  >
+    <!-- Header -->
+    <header
+      class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50 px-6 py-4"
+    >
+      <div
+        class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="bg-gradient-to-r from-sky-500 to-emerald-500 text-slate-950 px-3.5 py-1.5 rounded-xl font-black text-sm tracking-wide"
+          >
+            REACT RUNTIME
+          </div>
+          <div>
+            <h1 class="text-lg font-bold tracking-tight text-white">
+              React 시작부터 map() 실행까지 디버깅 시뮬레이터
+            </h1>
+            <p class="text-xs text-slate-400">
+              도메인 호출부터 콜백 함수 매개변수 바인딩까지의 흐름을 한 단계씩
+              시각화합니다.
+            </p>
+          </div>
+        </div>
+        <div
+          class="flex items-center gap-2 bg-slate-950/80 px-3 py-1.5 rounded-lg border border-slate-800 text-xs text-slate-300"
+        >
+          <span
+            class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"
+          ></span>
+          <span>실시간 데이터 바인딩 디버거</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main
+      class="max-w-7xl mx-auto p-4 md:p-6 w-full flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch"
+    >
+      <!-- Left Column: Step Navigation, Explanations, Play Control (lg:span-4) -->
+      <div class="lg:col-span-4 flex flex-col gap-4">
+        <!-- Interactive Guide Bubble Card -->
+        <div
+          class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-xl relative overflow-hidden flex flex-col justify-between min-h-[220px]"
+        >
+          <!-- Guide Badge -->
+          <div class="flex items-center justify-between mb-3">
+            <span
+              class="text-xs font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1.5"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              실행 경로 가이드봇
+            </span>
+            <span
+              id="step-badge"
+              class="text-[11px] bg-slate-950 text-emerald-400 border border-slate-800 px-2.5 py-0.5 rounded-full font-mono"
+              >STEP 0 / 11</span
+            >
+          </div>
+
+          <!-- Speech Content -->
+          <div class="flex-grow flex items-start gap-3 mt-1">
+            <div
+              class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 text-lg flex items-center justify-center flex-shrink-0 pulse-glow"
+            >
+              💡
+            </div>
+            <div class="space-y-1.5">
+              <h4
+                id="guide-title"
+                class="text-sm font-black text-white leading-tight"
+              >
+                로딩 중...
+              </h4>
+              <p id="guide-body" class="text-xs text-slate-300 leading-relaxed">
+                도메인을 입력하여 리액트 앱이 실행되는 첫 걸음부터 차례대로 작동
+                원리를 파악해 보세요.
+              </p>
+            </div>
+          </div>
+
+          <!-- Progress Indicator -->
+          <div
+            class="w-full bg-slate-950 h-1 rounded-full overflow-hidden mt-4"
+          >
+            <div
+              id="guide-progress"
+              class="bg-emerald-500 h-full transition-all duration-300"
+              style="width: 0%"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Control Dashboard Buttons -->
+        <div
+          class="bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl"
+        >
+          <span
+            class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2.5"
+            >시뮬레이션 조작 패널</span
+          >
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              id="btn-prev"
+              class="bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2.5 px-3 rounded-xl text-xs border border-slate-700 disabled:opacity-30 disabled:pointer-events-none"
+              disabled
+            >
+              이전 단계
+            </button>
+            <button
+              id="btn-play"
+              class="bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black py-2.5 px-3 rounded-xl text-xs hover:from-emerald-400 hover:to-teal-300"
+            >
+              자동 재생
+            </button>
+            <button
+              id="btn-next"
+              class="bg-slate-800 hover:bg-slate-700 text-white font-semibold py-2.5 px-3 rounded-xl text-xs border border-slate-700"
+            >
+              다음 단계
+            </button>
+          </div>
+          <div
+            class="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-800/60 text-xs"
+          >
+            <button
+              id="btn-reset"
+              class="text-slate-400 hover:text-white flex items-center gap-1 transition"
+            >
+              ◀ 처음으로 리셋
+            </button>
+            <div class="flex items-center gap-1">
+              <span class="text-[10px] text-slate-500">지연 속도:</span>
+              <select
+                id="ctrl-speed"
+                class="bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-slate-300"
+              >
+                <option value="3000">천천히 (3초)</option>
+                <option value="2000" selected>보통 (2초)</option>
+                <option value="1000">빠르게 (1초)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Educational Info Card -->
+        <div
+          class="bg-slate-900/60 rounded-2xl border border-slate-800/80 p-4 text-xs text-slate-400 space-y-2"
+        >
+          <h5 class="font-bold text-slate-300 flex items-center gap-1">
+            <svg
+              class="w-3.5 h-3.5 text-emerald-400"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              ></path>
+            </svg>
+            그것이 궁금하다! .map() 호출의 비밀
+          </h5>
+          <p class="leading-relaxed">
+            <code class="text-amber-400 bg-slate-950 px-1 py-0.5 rounded"
+              >numbers.map(숫자출력)</code
+            >은 어떻게 숫자가 매개변수
+            <code class="text-sky-400">item</code>으로 들어가나요?
+          </p>
+          <p class="leading-relaxed">
+            배열의 내장 함수인 <code class="text-emerald-400">map</code>은
+            자신이 전달받은 콜백 함수를 매 루프마다 대신 실행해 줍니다. 이때
+            내부적으로
+            <code class="text-yellow-400"
+              >숫자출력(numbers[i], i, 원본배열)</code
+            >
+            처럼 현재 원소 값을 첫 번째 인자로 직접 주입하여 호출해주므로,
+            우리는 소괄호 기호 없이 함수 이름만 대입해도 파라미터가 자동으로
+            매핑되는 것입니다!
+          </p>
+        </div>
+      </div>
+
+      <!-- Right Column: Winding React Execution Lifecycle & Visual Code flow (lg:span-8) -->
+      <div class="lg:col-span-8 flex flex-col gap-4">
+        <!-- Visual Workspace Board -->
+        <div
+          class="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-2xl flex-grow flex flex-col gap-6 relative overflow-hidden"
+        >
+          <!-- ROW 1: Browser URL Entry (도메인 입력 단계) -->
+          <div
+            id="card-browser"
+            class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 transition-all duration-300 pending-card"
+          >
+            <div
+              class="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-900 text-xs text-slate-400"
+            >
+              <span
+                class="inline-block w-2.5 h-2.5 rounded-full bg-slate-800"
+              ></span>
+              <strong>[1단계] 브라우저 요청 (클라이언트 진입)</strong>
+            </div>
+            <!-- Mock Address Bar -->
+            <div
+              class="flex items-center gap-2.5 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs"
+            >
+              <div class="flex gap-1">
+                <span class="w-2 h-2 rounded-full bg-rose-500/80"></span>
+                <span class="w-2 h-2 rounded-full bg-amber-500/80"></span>
+                <span class="w-2 h-2 rounded-full bg-emerald-500/80"></span>
+              </div>
+              <div
+                class="bg-slate-950 text-slate-300 font-mono flex-grow py-1 px-2.5 rounded-md border border-slate-800/60 flex items-center justify-between"
+              >
+                <span id="browser-url">http://localhost:3000</span>
+                <span
+                  id="browser-cursor"
+                  class="text-emerald-400 font-bold animate-pulse font-sans"
+                  >◀ 엔터 키 입력 대기 중</span
+                >
+              </div>
+            </div>
+          </div>
+
+          <!-- ROW 2: 두 개 파일 병렬 레이아웃 (index.html & main.jsx) -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- index.html File View -->
+            <div
+              id="card-html"
+              class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 transition-all duration-300 pending-card"
+            >
+              <div
+                class="flex items-center justify-between pb-2 border-b border-slate-900 mb-2 text-xs text-slate-400"
+              >
+                <span class="font-mono text-cyan-400 font-bold"
+                  >📄 public/index.html</span
+                >
+                <span
+                  class="text-[9px] uppercase tracking-wider bg-cyan-950 text-cyan-300 px-1.5 py-0.5 rounded"
+                  >뼈대 HTML</span
+                >
+              </div>
+              <div class="code-font text-[11px] leading-relaxed text-slate-400">
+                <p>&lt;!DOCTYPE html&gt;</p>
+                <p>&lt;html lang="ko"&gt;</p>
+                <p>&lt;body&gt;</p>
+                <!-- root element highlight -->
+                <p
+                  id="html-root-line"
+                  class="pl-3 transition-colors duration-200"
+                >
+                  &lt;div
+                  <span class="text-amber-300 font-bold">id="root"</span
+                  >&gt;&lt;/div&gt;
+                </p>
+                <p class="pl-3 text-slate-500">
+                  &lt;!-- React 돔이 탑재될 빈 그릇 --&gt;
+                </p>
+                <p class="pl-3">
+                  &lt;script
+                  <span class="text-sky-300">src="/src/main.jsx"</span
+                  >&gt;&lt;/script&gt;
+                </p>
+                <p>&lt;/body&gt;</p>
+              </div>
+            </div>
+
+            <!-- main.jsx Entry View -->
+            <div
+              id="card-main"
+              class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 transition-all duration-300 pending-card"
+            >
+              <div
+                class="flex items-center justify-between pb-2 border-b border-slate-900 mb-2 text-xs text-slate-400"
+              >
+                <span class="font-mono text-sky-400 font-bold"
+                  >📄 src/main.jsx</span
+                >
+                <span
+                  class="text-[9px] uppercase tracking-wider bg-sky-950 text-sky-300 px-1.5 py-0.5 rounded"
+                  >엔트리 파일</span
+                >
+              </div>
+              <div
+                class="code-font text-[11px] leading-relaxed text-slate-400 space-y-0.5"
+              >
+                <p>
+                  <span class="text-purple-400">import</span> React
+                  <span class="text-purple-400">from</span>
+                  <span class="text-amber-300">'react'</span>;
+                </p>
+                <p>
+                  <span class="text-purple-400">import</span> ReactDOM
+                  <span class="text-purple-400">from</span>
+                  <span class="text-amber-300">'react-dom'</span>;
+                </p>
+                <p>
+                  <span class="text-purple-400">import</span> App5
+                  <span class="text-purple-400">from</span>
+                  <span class="text-amber-300">'./App5'</span>;
+                </p>
+                <div
+                  id="main-root-render"
+                  class="p-1 rounded transition-colors duration-200 mt-1"
+                >
+                  <p>ReactDOM.<span class="text-blue-400">createRoot</span>(</p>
+                  <p class="pl-3">
+                    document.<span class="text-blue-400">getElementById</span
+                    >(<span class="text-amber-300">'root'</span>)
+                  </p>
+                  <p>
+                    ).<span class="text-yellow-400">render</span>(<span
+                      class="text-emerald-400 font-bold"
+                      >&lt;App5 /&gt;</span
+                    >);
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ROW 3: App5.jsx Component View -->
+          <div
+            id="card-app"
+            class="bg-slate-950 border border-slate-800 rounded-xl p-4 transition-all duration-300 pending-card"
+          >
+            <div
+              class="flex items-center justify-between pb-2 border-b border-slate-900 mb-2.5 text-xs text-slate-400"
+            >
+              <span
+                class="font-mono text-emerald-400 font-bold flex items-center gap-1"
+              >
+                📄 src/App5.jsx (실제 React 컴포넌트 내부)
+              </span>
+              <span
+                class="text-[9px] uppercase tracking-wider bg-emerald-950 text-emerald-300 px-1.5 py-0.5 rounded"
+                >Component</span
+              >
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+              <!-- Left: App5 Code lines -->
+              <div
+                class="md:col-span-8 code-font text-[11px] leading-relaxed text-slate-300 space-y-0.5 border-r border-slate-900 pr-3"
+              >
+                <div id="app-import" class="p-0.5 rounded transition-colors">
+                  <span class="text-purple-400">import</span> React
+                  <span class="text-purple-400">from</span>
+                  <span class="text-amber-300">"react"</span>;
+                </div>
+
+                <!-- Callback definition -->
+                <div
+                  id="app-callback"
+                  class="p-1 rounded transition-colors bg-slate-900/40 border border-transparent"
+                >
+                  <p>
+                    <span class="text-purple-400">function</span>
+                    <span class="text-yellow-300 font-bold">숫자출력</span
+                    >(<span class="text-orange-400 font-bold">item</span>) {
+                  </p>
+                  <p class="pl-4">
+                    <span class="text-purple-400">return</span>
+                    <span class="text-emerald-400 font-bold"
+                      >&lt;h3&gt;{item}&lt;/h3&gt;</span
+                    >;
+                  </p>
+                  <p>}</p>
+                </div>
+
+                <div class="text-slate-500 py-0.5">// App5 컴포넌트 본문</div>
+                <div>
+                  <span class="text-purple-400">export default function</span>
+                  <span class="text-blue-400 font-bold">App5</span>() {
+                </div>
+
+                <!-- numbers array variable decl -->
+                <div
+                  id="app-array-decl"
+                  class="pl-4 p-0.5 rounded transition-colors"
+                >
+                  <span class="text-purple-400">let</span>
+                  <span class="text-sky-300 font-bold">numbers</span> = [<span
+                    class="text-sky-400"
+                    >1, 2, 3, 4, 5, 6</span
+                  >];
+                </div>
+
+                <div class="pl-4">
+                  <span class="text-purple-400">return</span> (
+                </div>
+                <div class="pl-8 text-slate-500">&lt;div&gt;</div>
+                <div class="pl-12 text-slate-400">
+                  &lt;h2&gt;map()&lt;/h2&gt;
+                </div>
+
+                <!-- MAP EXECUTION LINE -->
+                <div
+                  id="app-map-call"
+                  class="pl-12 py-1 px-1.5 rounded transition-all bg-slate-900/20 border border-transparent"
+                >
+                  <span class="text-slate-400">{</span>
+                  <span class="text-sky-300 font-bold">numbers</span>.<span
+                    class="text-yellow-400 font-bold"
+                    >map</span
+                  >(<span class="text-amber-300 font-black">숫자출력</span>)
+                  <span class="text-slate-400">}</span>
+                </div>
+
+                <div class="pl-8 text-slate-500">&lt;/div&gt;</div>
+                <div class="pl-4">);</div>
+                <div>}</div>
+              </div>
+
+              <!-- Right: Real-time map callstack visualizer -->
+              <div
+                class="md:col-span-4 flex flex-col justify-between bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs"
+              >
+                <div>
+                  <span
+                    class="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-2"
+                    >🔍 map() 엔진 내부 추적</span
+                  >
+                  <div class="space-y-2">
+                    <div
+                      class="bg-slate-950 p-2 rounded border border-slate-800"
+                    >
+                      <span class="text-[9px] text-slate-500 block"
+                        >현재 가져온 원소 값:</span
+                      >
+                      <strong
+                        id="tracker-value"
+                        class="text-sky-400 font-mono text-sm"
+                        >-</strong
+                      >
+                    </div>
+                    <div
+                      class="bg-slate-950 p-2 rounded border border-slate-800"
+                    >
+                      <span class="text-[9px] text-slate-500 block"
+                        >JS의 콜백 자동 호출 구조:</span
+                      >
+                      <code
+                        id="tracker-formula"
+                        class="text-[10px] text-yellow-300 font-mono"
+                        >-</code
+                      >
+                    </div>
+                    <div
+                      class="bg-slate-950 p-2 rounded border border-slate-800"
+                    >
+                      <span class="text-[9px] text-slate-500 block"
+                        >콜백 함수 반환값 (JSX):</span
+                      >
+                      <code
+                        id="tracker-jsx"
+                        class="text-[10px] text-emerald-400 font-mono"
+                        >-</code
+                      >
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="mt-4 border-t border-slate-800/80 pt-2 text-[10px] text-slate-500"
+                >
+                  * JS의 map 함수는 배열을 한 바퀴 순회하며 각 원소를 파라미터로
+                  콜백 함수에
+                  <span class="text-slate-300">자동 전달</span>합니다.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ROW 4: Browser Actual Output (실제 출력 화면) -->
+          <div
+            id="card-result"
+            class="bg-slate-950 border border-slate-800 rounded-xl p-3.5 transition-all duration-300 pending-card"
+          >
+            <div
+              class="flex items-center justify-between pb-1.5 border-b border-slate-900 mb-2.5 text-xs text-slate-400"
+            >
+              <strong>[최종 단계] 브라우저 화면 출력 (Real DOM)</strong>
+              <span
+                class="text-[9px] text-rose-400 font-bold bg-rose-950/40 px-1.5 py-0.5 rounded"
+                >Rendered View</span
+              >
+            </div>
+
+            <div
+              class="bg-white text-slate-950 p-4 rounded-xl border border-slate-200 shadow-inner"
+            >
+              <div class="font-sans">
+                <h2
+                  class="text-lg font-black text-slate-950 border-b border-slate-100 pb-1.5 mb-2"
+                >
+                  map()
+                </h2>
+                <!-- Generated list will display here step by step -->
+                <div id="dom-target" class="flex flex-wrap gap-2 items-center">
+                  <span class="text-slate-400 text-xs italic"
+                    >React 로딩 대기 중...</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer
+      class="border-t border-slate-900 bg-slate-950/80 py-4 text-center text-xs text-slate-500"
+    >
+      <p>
+        © 2026 React map() 로드 & 콜백 데이터 오토 바인딩 심층 디버거. map은
+        단순 반복을 넘어 새로운 가공 배열을 안전하게 리턴합니다.
+      </p>
+    </footer>
+
+    <!-- Script Engine Logic -->
+    <script>
+      // ------------------------------------------------------------
+      // 1. 디버거 가이드 단계별 데이터 정의 (Quest Steps)
+      // ------------------------------------------------------------
+      const numbers = [1, 2, 3, 4, 5, 6];
+      const steps = [];
+
+      // Step 0: Initial ready
+      steps.push({
+        title: "🌍 01. 주소창 입력 및 접속 요청",
+        desc: "브라우저 주소창에 <code>localhost:3000</code>을 입력하고 접속을 시작합니다. 웹 서버에 메인 리소스 파일 요청이 전달됩니다.",
+        activeCardId: "card-browser",
+        activeLines: [],
+        urlText: "http://localhost:3000  [ 엔터키 클릭됨! ]",
+        trackerVal: "-",
+        trackerFormula: "-",
+        trackerJsx: "-",
+        visibleElementsCount: 0,
+        highlightHtmlRoot: false,
+        highlightMainRender: false,
+      });
+
+      // Step 1: index.html load
+      steps.push({
+        title: "📄 02. index.html 로드 및 구조 생성",
+        desc: "웹 서버에서 가장 먼저 빈 HTML 뼈대 파일인 <code>index.html</code>이 로드됩니다. 화면을 그릴 도킹 기준선인 <span class='text-amber-400 font-bold'>&lt;div id='root'&gt;&lt;/div&gt;</span> 태그가 메모리에 생성됩니다.",
+        activeCardId: "card-html",
+        activeLines: [],
+        urlText: "http://localhost:3000",
+        trackerVal: "-",
+        trackerFormula: "-",
+        trackerJsx: "-",
+        visibleElementsCount: 0,
+        highlightHtmlRoot: true,
+        highlightMainRender: false,
+      });
+
+      // Step 2: main.jsx Entry Point run
+      steps.push({
+        title: "⚙️ 03. Entry Point 실행 (main.jsx)",
+        desc: "HTML 하단에 링크된 <code>main.jsx</code> 파일이 브라우저에서 실행됩니다. <code>ReactDOM.createRoot</code> 함수가 <strong>#root</strong> 빈 뼈대를 기준으로 React 관리 영역을 할당하고, <span class='text-emerald-400 font-bold'>&lt;App5 /&gt;</span> 컴포넌트를 호출합니다.",
+        activeCardId: "card-main",
+        activeLines: [],
+        urlText: "http://localhost:3000",
+        trackerVal: "-",
+        trackerFormula: "-",
+        trackerJsx: "-",
+        visibleElementsCount: 0,
+        highlightHtmlRoot: false,
+        highlightMainRender: true,
+      });
+
+      // Step 3: App5 컴포넌트 진입 및 변수 생성
+      steps.push({
+        title: "🎒 04. App5 컴포넌트 실행 & 배열 선언",
+        desc: "<code>App5.jsx</code>가 실행되면서 컴포넌트의 첫머리에 <code>let numbers = [1, 2, 3, 4, 5, 6]</code> 변수가 메모리에 등록됩니다. 순회를 대비한 데이터 모음이 준비됩니다.",
+        activeCardId: "card-app",
+        activeLines: ["app-import", "app-array-decl"],
+        urlText: "http://localhost:3000",
+        trackerVal: "-",
+        trackerFormula: "-",
+        trackerJsx: "-",
+        visibleElementsCount: 0,
+        highlightHtmlRoot: false,
+        highlightMainRender: false,
+      });
+
+      // Step 4: Map 함수 대기 상태
+      steps.push({
+        title: "🧭 05. map(숫자출력) 연산 개시",
+        desc: "JSX 구문 내에서 <span class='text-yellow-400 font-bold'>numbers.map(숫자출력)</span> 코드를 발견합니다! <code>map</code>은 배열 안의 모든 원소들을 각각 <code>숫자출력</code> 함수에 꽂아 넣기 위해 대기합니다.",
+        activeCardId: "card-app",
+        activeLines: ["app-map-call"],
+        urlText: "http://localhost:3000",
+        trackerVal: "대기",
+        trackerFormula: "map() 내부 작동 시작",
+        trackerJsx: "순회 대기 중",
+        visibleElementsCount: 0,
+        highlightHtmlRoot: false,
+        highlightMainRender: false,
+      });
+
+      // Step 5 ~ 10: 6 Iteration loop cycles
+      for (let i = 0; i < numbers.length; i++) {
+        const val = numbers[i];
+        steps.push({
+          title: `🔄 Loop [${i + 1}/6]: 원소 '${val}' 자동 매핑`,
+          desc: `<strong>중요!</strong> 우리가 직접 호출하지 않아도 map 엔진이 내부적으로 <code class='text-yellow-300 font-bold'>숫자출력(${val}, ${i}, numbers)</code>로 자동 실행해 줍니다. 이에 따라 <code class='text-sky-400 font-bold'>item</code> 매개변수에 자동으로 값 <strong class='text-sm text-sky-400'>${val}</strong>이 바인딩(대입)되고 <strong class='text-emerald-400 font-bold'>&lt;h3&gt;${val}&lt;/h3&gt;</strong>이 리턴됩니다.`,
+          activeCardId: "card-app",
+          activeLines: ["app-callback", "app-map-call"],
+          urlText: "http://localhost:3000",
+          trackerVal: `${val} (index: ${i})`,
+          trackerFormula: `숫자출력(numbers[${i}]) ➔ 숫자출력(${val})`,
+          trackerJsx: `<h3>${val}</h3>`,
+          visibleElementsCount: i + 1,
+          highlightHtmlRoot: false,
+          highlightMainRender: false,
+        });
+      }
+
+      // Step 11: Render Complete
+      steps.push({
+        title: "🏰 11. 가상 돔 취합 및 최종 브라우저 렌더링",
+        desc: "모든 순회가 끝나고 6개의 <code>&lt;h3&gt;</code> 구조 조각들이 수집 완료되었습니다! React가 가상 돔 변경사항을 합쳐 브라우저의 `#root` 내부에 일괄 적용하면서 화면에 최종 출력됩니다.",
+        activeCardId: "card-result",
+        activeLines: ["app-map-call"],
+        urlText: "http://localhost:3000",
+        trackerVal: "완료",
+        trackerFormula: "배열 순회 종료",
+        trackerJsx: "JSX Array 취합 완료",
+        visibleElementsCount: 6,
+        highlightHtmlRoot: false,
+        highlightMainRender: false,
+      });
+
+      // ------------------------------------------------------------
+      // 2. STATE MANAGEMENT (런타임 제어 변수)
+      // ------------------------------------------------------------
+      let currentStepIndex = 0;
+      let autoPlayIntervalId = null;
+      let isPlaying = false;
+      let playSpeed = 2000;
+
+      // ------------------------------------------------------------
+      // 3. SELECTING DOM NODES (선택 노드 바인딩)
+      // ------------------------------------------------------------
+      const btnPrev = document.getElementById("btn-prev");
+      const btnNext = document.getElementById("btn-next");
+      const btnPlay = document.getElementById("btn-play");
+      const btnReset = document.getElementById("btn-reset");
+      const ctrlSpeed = document.getElementById("ctrl-speed");
+
+      const stepBadge = document.getElementById("step-badge");
+      const guideTitle = document.getElementById("guide-title");
+      const guideBody = document.getElementById("guide-body");
+      const guideProgress = document.getElementById("guide-progress");
+
+      const browserUrl = document.getElementById("browser-url");
+      const browserCursor = document.getElementById("browser-cursor");
+      const htmlRootLine = document.getElementById("html-root-line");
+      const mainRootRender = document.getElementById("main-root-render");
+
+      const trackerValue = document.getElementById("tracker-value");
+      const trackerFormula = document.getElementById("tracker-formula");
+      const trackerJsx = document.getElementById("tracker-jsx");
+      const domTarget = document.getElementById("dom-target");
+
+      // ------------------------------------------------------------
+      // 4. MAIN RENDERING LOOP (데이터 디버그 화면 동기화)
+      // ------------------------------------------------------------
+      function renderDebuggerState() {
+        const step = steps[currentStepIndex];
+
+        // A. Update Left Guide Description Panel
+        stepBadge.textContent = `STEP ${currentQuestStepString()}`;
+        guideTitle.innerHTML = step.title;
+        guideBody.innerHTML = step.desc;
+        guideProgress.style.width = `${(currentStepIndex / (steps.length - 1)) * 100}%`;
+
+        // B. Update Browser UI Tab status
+        browserUrl.textContent = step.urlText;
+        if (currentStepIndex === 0) {
+          browserCursor.classList.remove("hidden");
+        } else {
+          browserCursor.classList.add("hidden");
+        }
+
+        // C. Active Card glowing container (카드 포커싱 연출)
+        const allCards = [
+          "card-browser",
+          "card-html",
+          "card-main",
+          "card-app",
+          "card-result",
+        ];
+        allCards.forEach((cardId) => {
+          const el = document.getElementById(cardId);
+          if (cardId === step.activeCardId) {
+            el.className = el.className.replace("pending-card", "").trim();
+            el.classList.add("active-card");
+          } else {
+            el.classList.remove("active-card");
+            if (!el.classList.contains("pending-card")) {
+              el.classList.add("pending-card");
+            }
+          }
+        });
+
+        // D. index.html & main.jsx internal line focus
+        if (step.highlightHtmlRoot) {
+          htmlRootLine.className =
+            "pl-3 bg-amber-500/20 text-white border-l-2 border-amber-500 p-0.5 rounded font-bold transition-colors duration-200";
+        } else {
+          htmlRootLine.className =
+            "pl-3 transition-colors duration-200 text-slate-400";
+        }
+
+        if (step.highlightMainRender) {
+          mainRootRender.className =
+            "p-1 rounded bg-sky-500/20 text-white border-l-2 border-sky-400 font-bold transition-all duration-200";
+        } else {
+          mainRootRender.className =
+            "p-1 rounded transition-colors duration-200 mt-1 text-slate-400";
+        }
+
+        // E. App5.jsx component line highlights
+        const appLines = [
+          "app-import",
+          "app-callback",
+          "app-array-decl",
+          "app-map-call",
+        ];
+        appLines.forEach((ln) => {
+          const el = document.getElementById(ln);
+          el.className = el.className
+            .replace(/bg-\w+-\d+\/\d+/, "")
+            .replace("border-l-2", "")
+            .replace("border-emerald-500", "")
+            .trim();
+
+          if (step.activeLines.includes(ln)) {
+            el.className +=
+              " bg-emerald-500/20 border-l-2 border-emerald-500 text-slate-100 font-semibold";
+          }
+        });
+
+        // F. Map engine tracker data (콜백 주입 상황판 동기화)
+        trackerValue.textContent = step.trackerValue;
+        trackerFormula.innerHTML = step.trackerFormula;
+        trackerJsx.textContent = step.trackerJsx;
+
+        if (step.trackerVal !== "-") {
+          trackerValue.textContent = step.trackerVal;
+          trackerValue.className =
+            "text-sm font-bold text-sky-400 font-mono pulse-glow";
+        } else {
+          trackerValue.className = "text-sm font-bold text-slate-500 font-mono";
+        }
+
+        // G. Browser Device Screen Real DOM outputs (브라우저 가상돔 화면 동기화)
+        domTarget.innerHTML = "";
+        if (step.visibleElementsCount === 0) {
+          if (currentStepIndex === steps.length - 1) {
+            domTarget.innerHTML = `<span class="text-rose-500 text-xs font-semibold">오류 발생</span>`;
+          } else {
+            domTarget.innerHTML = `
+            <span class="text-slate-400 text-xs italic flex items-center gap-1.5 py-1">
+              <svg class="animate-spin h-3.5 w-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17.2"></path>
+              </svg>
+              React 렌더 엔진이 map 연산 결과를 수집 중입니다...
+            </span>
+          `;
+          }
+        } else {
+          for (let i = 0; i < step.visibleElementsCount; i++) {
+            const val = numbers[i];
+            const itemDiv = document.createElement("div");
+            itemDiv.className =
+              "py-1 px-3 bg-slate-50 border border-slate-200 rounded text-slate-900 font-bold text-xs shadow-sm animate-bounce flex items-center gap-1.5";
+            itemDiv.innerHTML = `
+            <span class="text-[9px] text-emerald-600 font-mono">[${i}]</span>
+            <span class="text-sm">${val}</span>
+          `;
+            domTarget.appendChild(itemDiv);
+          }
+        }
+
+        // Button Controls
+        btnPrev.disabled = currentStepIndex === 0;
+        btnNext.disabled = currentStepIndex === steps.length - 1;
+      }
+
+      function currentQuestStepString() {
+        return `${currentStepIndex} / ${steps.length - 1}`;
+      }
+
+      // ------------------------------------------------------------
+      // 5. EVENT TRIGGERS & PLAYER LOOP CONTROLLER (이동 및 순회 트리거)
+      // ------------------------------------------------------------
+      function proceedNextStep() {
+        if (currentStepIndex < steps.length - 1) {
+          currentStepIndex++;
+          renderDebuggerState();
+        } else {
+          pauseSimulation();
+        }
+      }
+
+      function startSimulation() {
+        isPlaying = true;
+        btnPlay.textContent = "일시 정지 ⏸";
+        btnPlay.className =
+          "bg-gradient-to-r from-amber-500 to-orange-400 text-slate-950 font-black py-2.5 px-3 rounded-xl text-xs hover:from-amber-400 hover:to-orange-300";
+        autoPlayIntervalId = setInterval(proceedNextStep, playSpeed);
+      }
+
+      function pauseSimulation() {
+        isPlaying = false;
+        btnPlay.textContent = "자동 재생 ▶";
+        btnPlay.className =
+          "bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black py-2.5 px-3 rounded-xl text-xs hover:from-emerald-400 hover:to-teal-300";
+        clearInterval(autoPlayIntervalId);
+        autoPlayIntervalId = null;
+      }
+
+      // Event Handlers
+      btnPlay.addEventListener("click", () => {
+        if (isPlaying) {
+          pauseSimulation();
+        } else {
+          if (currentStepIndex === steps.length - 1) {
+            currentStepIndex = 0;
+          }
+          startSimulation();
+        }
+      });
+
+      btnPrev.addEventListener("click", () => {
+        pauseSimulation();
+        if (currentStepIndex > 0) {
+          currentStepIndex--;
+          renderDebuggerState();
+        }
+      });
+
+      btnNext.addEventListener("click", () => {
+        pauseSimulation();
+        if (currentStepIndex < steps.length - 1) {
+          currentQuestIndex = currentStepIndex; // backward compatibility logic guard
+          currentStepIndex++;
+          renderDebuggerState();
+        }
+      });
+
+      btnReset.addEventListener("click", () => {
+        pauseSimulation();
+        currentStepIndex = 0;
+        renderDebuggerState();
+      });
+
+      ctrlSpeed.addEventListener("change", (e) => {
+        playSpeed = parseInt(e.target.value);
+        if (isPlaying) {
+          pauseSimulation();
+          startSimulation();
+        }
+      });
+
+      // On Load Initialization
+      window.onload = function () {
+        renderDebuggerState();
+      };
+    </script>
+  </body>
+</html>

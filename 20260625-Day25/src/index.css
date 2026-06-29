@@ -1,0 +1,41 @@
+*{
+  margin: 0;
+  padding: 0;
+
+  box-sizing: border-box;
+
+  font-size: 16px;
+}
+
+ul{
+  list-style: none;
+}
+
+@media(max-width : 740){
+  *{
+    font-size: 12px;
+  }
+}
+
+/* 모든 리액트 파일은 팝업 형식으로 가운데 정렬 */
+.max-container{
+  /* 최대 너비 지정 */
+  width: 1000px;
+  height: 100vh;
+
+  /* 가운데 정렬 */
+  margin: 30px auto;
+
+  /* 안쪽 여백 */
+  padding: 30px;
+
+  background-color: #ddd;
+
+  border-radius: 40px;
+}
+/* AdminPage 디자인 */
+
+/* ControlTest2.css */
+.nav{
+  cursor: pointer;
+}

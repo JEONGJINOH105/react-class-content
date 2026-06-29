@@ -1,0 +1,58 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+.page {
+  min-height: 100vh;
+  background: #eeeeee;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.darkPage {
+  background: #111111;
+}
+.phone {
+  width: 340px;
+  padding: 28px;
+  border-radius: 28px;
+  background: white;
+  color: black;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+.darkPhone {
+  background: #222222;
+  color: white;
+}
+.item {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #f3f3f3;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.darkPhone .item {
+  background: #333333;
+}
+button {
+  border: none;
+  border-radius: 20px;
+  padding: 8px 18px;
+  background: royalblue;
+  color: white;
+  cursor: pointer;
+}
+.result {
+  margin-top: 22px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #f3f3f3;
+}
+.darkPhone .result {
+  background: #333333;
+}
